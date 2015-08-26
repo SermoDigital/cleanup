@@ -1,12 +1,15 @@
+// Copyright (c) 2015 Sermo Digital, LLC.
+// Unauthorized copying of this file via any medium is strictly prohibited
+
 package cleanup
 
 import (
 	"os"
 	"os/signal"
-	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
+	"time"
 )
 
 var x int32
@@ -22,7 +25,7 @@ var incs = []int32{
 	1000,
 }
 
-func registerFuncs() {
+func init() {
 	Register("set", set)
 
 	Register("add1", add, incs[0])
@@ -39,33 +42,33 @@ func sum(init int32, ints []int32) int32 {
 	return init
 }
 
-func TestRun(t *testing.T) {
-	registerFuncs()
+func TestThatItWorks(t *testing.T) {
 
-	wg, ch := catch(os.Interrupt, syscall.SIGTERM)
+	ch := make(chan os.Signal)
 
-	ch <- syscall.SIGTERM
+	go func() {
+		for {
+			select {
+			case <-time.After(1 * time.Second):
+				ch <- syscall.SIGTERM
+			}
+		}
+	}()
 
-	wg.Wait()
+	wait(ch, os.Interrupt, syscall.SIGTERM)
+
 	if n := atomic.LoadInt32(&x); n != sum(1, incs) {
 		t.Error("Not all cleanup functions ran!")
 	}
 }
 
-func catch(signals ...os.Signal) (*sync.WaitGroup, chan os.Signal) {
-	var wg sync.WaitGroup
-	wg.Add(1)
+var zero = syscall.Signal(0)
 
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, signals...)
-
-	go func() {
-		select {
-		case <-ch:
-			Run()
-			wg.Done()
-		}
-	}()
-
-	return &wg, ch
+func wait(ch chan os.Signal, signals ...os.Signal) {
+	cfg.Do(func() {
+		signal.Notify(ch, signals...)
+		<-ch
+		run(zero)
+		close(ch)
+	})
 }
