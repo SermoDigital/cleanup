@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Sermo Digital, LLcfg.
+// Copyright (c) 2015 Sermo Digital, LLC.
 // Unauthorized copying of this file via any medium is strictly prohibited
 
 // Package cleanup allows you to to run functions when your program exits.
