@@ -44,11 +44,15 @@ func Register(name string, fn interface{}, args ...interface{}) {
 // Wait catches signals and waits until all cleanup functions have has been
 // ran before it returns. It will only run once, no matter how many times it's
 // called.
-func Wait(signals ...os.Signal) {
+func Wait(print bool, signals ...os.Signal) {
 	cfg.Do(func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, signals...)
-		run(<-ch)
+		s := <-ch
+		if print {
+			glog.Infof("Caught signal %s.", s.String())
+		}
+		run(s)
 		close(ch)
 	})
 }
