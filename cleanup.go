@@ -11,20 +11,23 @@ import (
 	"reflect"
 	"sync"
 	"syscall"
-
-	"github.com/golang/glog"
 )
 
+type todo struct {
+	fn   interface{}
+	args []interface{}
+}
+
 var cfg = struct {
-	funcMap  map[string]interface{}
-	funcArgs map[string][]interface{}
+	funcMap map[string]*todo
+	last    *todo
 	*sync.Mutex
 	*sync.Once
 }{
-	funcMap:  make(map[string]interface{}),
-	funcArgs: make(map[string][]interface{}),
-	Mutex:    &sync.Mutex{},
-	Once:     &sync.Once{},
+	funcMap: make(map[string]*todo),
+	last:    nil,
+	Mutex:   &sync.Mutex{},
+	Once:    &sync.Once{},
 }
 
 // Register registers a function with the given name and arguments to be
@@ -32,13 +35,22 @@ var cfg = struct {
 // functions. I.e., Register("foo", fn) ... Register("foo", fn2) will panic.
 func Register(name string, fn interface{}, args ...interface{}) {
 	if _, ok := cfg.funcMap[name]; ok {
-		glog.Fatalf("Unable to re-register function %v under name %q", fn, name)
+		panic(fmt.Errorf("Unable to re-register function %v under name %q", fn, name))
 	}
 
 	cfg.Lock()
-	cfg.funcMap[name] = fn
-	cfg.funcArgs[name] = args
+	cfg.funcMap[name] = &todo{fn: fn, args: args}
 	cfg.Unlock()
+}
+
+// DoLast registers a function to run *after* every other function has run.
+// This can only be called once, and will panic otherwise.
+func DoLast(name string, fn interface{}, args ...interface{}) {
+	if cfg.last == nil {
+		cfg.last = &todo{fn: fn, args: args}
+	} else {
+		panic("Cannot call DoLast more than once!")
+	}
 }
 
 // Wait catches signals and waits until all cleanup functions have has been
@@ -50,7 +62,7 @@ func Wait(print bool, signals ...os.Signal) {
 		signal.Notify(ch, signals...)
 		s := <-ch
 		if print {
-			glog.Infof("Caught signal %s.", s.String())
+			fmt.Printf("Caught signal %s\n", s.String())
 		}
 		run(s)
 		close(ch)
@@ -60,9 +72,12 @@ func Wait(print bool, signals ...os.Signal) {
 // run invokes the given function and arguments for each value in
 // the map.
 func run(s os.Signal) {
-	for key, val := range cfg.funcMap {
-		args := cfg.funcArgs[key]
-		call(val, args...)
+	for _, val := range cfg.funcMap {
+		call(val.fn, val.args...)
+	}
+
+	if cfg.last != nil {
+		call(cfg.last.fn, cfg.last.args...)
 	}
 
 	sig := s.(syscall.Signal)
@@ -73,6 +88,7 @@ func run(s os.Signal) {
 // https://golang.org/src/text/template/funcs.go, with some minor
 // changes.
 func call(fn interface{}, args ...interface{}) (interface{}, error) {
+
 	v := reflect.ValueOf(fn)
 	typ := v.Type()
 
