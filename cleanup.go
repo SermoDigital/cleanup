@@ -1,5 +1,6 @@
-// Copyright (c) 2015 Sermo Digital, LLC.
-// Unauthorized copying of this file via any medium is strictly prohibited
+// Copyright 2015 Sermo Digital, LLC. All rights reserved.
+// Use of this source code is governed by the MIT License
+// that can be found in the LICENSE file.
 
 // Package cleanup allows you to to run functions when your program exits.
 package cleanup
